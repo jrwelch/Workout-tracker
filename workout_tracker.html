@@ -1,154 +1,47 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Workout Tracker with Cloud Sync</title>
+  <title>Workout Tracker with Google Sheets</title>
   <style>
     body { font-family: Arial; margin: 2rem; max-width: 800px; }
     select, input, button, textarea { margin: 0.5rem 0; padding: 0.4rem; width: 100%; }
     table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
     th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: center; }
     .section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
-    .hidden { display: none; }
   </style>
 </head>
 <body>
   <h2>🏋️‍♂️ Workout Tracker</h2>
 
-  <!-- === MODE SELECTOR === -->
-  <div>
-    <label for="modeSelect">Mode:</label>
-    <select id="modeSelect" onchange="toggleView()">
-      <option value="tracker">Workout Tracker</option>
-      <option value="editor">Template Editor</option>
-    </select>
-  </div>
-
-  <!-- === TEMPLATE EDITOR SECTION === -->
-  <div class="section" id="templateEditorSection">
-    <h3>Create or Edit Template</h3>
-    <input id="templateName" placeholder="Template name (e.g. Push Day)" />
-    <textarea id="exerciseList" rows="4" placeholder="Enter exercises, one per line"></textarea>
-    <button onclick="saveTemplate()">💾 Save Template</button>
-    <button onclick="loadTemplates()">🔄 Refresh Template List</button>
-  </div>
-
-  <!-- === WORKOUT TRACKER SECTION === -->
-  <div class="section" id="trackerSection">
-    <h3>Start Workout</h3>
-    <input type="date" id="date">
-    <select id="templateSelect" onchange="loadWorkoutFromTemplate()">
-      <option value="">-- Choose a Template --</option>
-    </select>
-    <form id="workoutForm" onsubmit="saveWorkout(event)">
-      <table id="workoutTable">
-        <thead>
-          <tr><th>Exercise</th><th>Weight</th><th>Time</th><th>Reps</th></tr>
-        </thead>
-        <tbody id="exerciseRows"></tbody>
-      </table>
-      <button type="submit">✅ Save Workout</button>
-    </form>
-  </div>
+  <input type="date" id="date">
+  <input type="text" id="template" placeholder="Template (e.g. Push)">
+  <textarea id="exerciseData" rows="10" placeholder="Enter exercises in format: Exercise,Weight,Time,Reps (one per line)"></textarea>
+  <button onclick="uploadWorkout()">✅ Save Workout</button>
 
   <script>
-    // 🔗 Replace this with your own Apps Script URL
     const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxEkVTYJJIvfZqIOzAAaYscBAEj98KkKi4om7TOIbqNPY3wFGdAhSClQJ7Hli3LjXBGFQ/exec';
 
-    const templatesKey = 'workoutTemplates';
-    const entries = [];
-
-    document.getElementById('date').valueAsDate = new Date();
-
-    function getStoredTemplates() {
-      return JSON.parse(localStorage.getItem(templatesKey) || '{}');
-    }
-
-    function saveTemplate() {
-      const name = document.getElementById('templateName').value.trim();
-      const raw = document.getElementById('exerciseList').value.trim();
-      if (!name || !raw) return alert("Please enter a name and at least one exercise.");
-      const exercises = raw.split('\n').map(x => x.trim()).filter(x => x);
-      const templates = getStoredTemplates();
-      templates[name] = exercises;
-      localStorage.setItem(templatesKey, JSON.stringify(templates));
-      alert("Template saved locally.");
-      loadTemplates();
-    }
-
-    function loadTemplates() {
-      const select = document.getElementById('templateSelect');
-      const templates = getStoredTemplates();
-      select.innerHTML = '<option value="">-- Choose a Template --</option>';
-      for (const name in templates) {
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        select.appendChild(option);
-      }
-    }
-
-    function loadWorkoutFromTemplate() {
-      const name = document.getElementById('templateSelect').value;
-      const templates = getStoredTemplates();
-      const exercises = templates[name];
-      const tbody = document.getElementById('exerciseRows');
-      tbody.innerHTML = '';
-      if (!exercises) return;
-
-      exercises.forEach(ex => {
-        const tr = document.createElement('tr');
-        tr.dataset.exercise = ex;
-        tr.innerHTML = `
-          <td>${ex}</td>
-          <td><input type="number" name="weight" required></td>
-          <td><input type="text" name="time" required></td>
-          <td><input type="number" name="reps" required></td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    function uploadWorkoutToGoogleSheets() {
+    function uploadWorkout() {
       const date = document.getElementById('date').value;
-      const type = document.getElementById('templateSelect').value;
-      const rows = document.querySelectorAll('#exerciseRows tr');
+      const template = document.getElementById('template').value;
+      const lines = document.getElementById('exerciseData').value.trim().split('\n');
 
-      const payload = Array.from(rows).map(row => {
-        const ex = row.dataset.exercise;
-        const weight = row.querySelector('input[name="weight"]').value;
-        const time = row.querySelector('input[name="time"]').value;
-        const reps = row.querySelector('input[name="reps"]').value;
-        return [date, type, ex, weight, time, reps];
+      const payload = lines.map(line => {
+        const [exercise, weight, time, reps] = line.split(',').map(x => x.trim());
+        return [date, template, exercise, weight, time, reps];
       });
 
       fetch(WEBAPP_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "text/plain"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "workout", data: payload })
       })
-      .then(response => response.text())
+      .then(res => res.text())
       .then(msg => alert("✅ " + msg))
       .catch(err => alert("❌ Upload error: " + err));
-
     }
 
-    function saveWorkout(e) {
-      e.preventDefault();
-      uploadWorkoutToGoogleSheets();
-      document.getElementById('workoutForm').reset();
-      document.getElementById('exerciseRows').innerHTML = '';
-    }
-
-    function toggleView() {
-      const mode = document.getElementById('modeSelect').value;
-      document.getElementById('templateEditorSection').classList.toggle('hidden', mode !== 'editor');
-      document.getElementById('trackerSection').classList.toggle('hidden', mode !== 'tracker');
-    }
-
-    loadTemplates();
-    toggleView();
+    document.getElementById('date').valueAsDate = new Date();
   </script>
 </body>
 </html>
